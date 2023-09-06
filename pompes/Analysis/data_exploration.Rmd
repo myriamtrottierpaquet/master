@@ -1,0 +1,159 @@
+---
+title: "Data exploration"
+author: "Myriam Trottier-Paquet"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Droppings cort were assay by the Centre d'Étude Biologique de Chizé
+```{r}
+cort <- readxl::read_xlsx("pompes/Data/CORT_zoo.xlsx",
+                              sheet = 1, 
+                              col_names = T, 
+                              na = c("-", ""))
+
+
+#quick overview
+glimpse(cort)
+head(cort) ;tail(cort)
+summary(cort)
+dim(cort)
+
+#quick plot
+ggplot(subset(cort, species=="Canada Goose"), aes(date, cort))+geom_point()+geom_smooth()+ggtitle("Canada Goose")
+ggplot(subset(cort, species=="Snow Goose"), aes(date, cort))+geom_point()+geom_smooth()+ggtitle("Snow Goose")
+```
+
+
+```{r}
+zoo <- readxl::read_xlsx("pompes/data/Zoo2022.xlsx",
+                              sheet = 1, 
+                              col_names = T, 
+                              na = c("-", ""))
+
+#With dplyr
+#Using dplyr; always takes and gives a dataframe
+glimpse(zoo)
+
+
+zoo$Date<- as.POSIXlt(strptime(zoo$Date, "%Y-%m-%d"))
+zoo$DateChirurgie<-as.POSIXlt(strptime(zoo$DateChirurgie, "%Y-%m-%d"))
+
+#Quick summary
+summary(zoo)
+
+
+#Enlever des donnees du 2 avril pour les oies des neiges
+
+CAGO<-filter(zoo, Sp=="CAGO")
+SNGO<-filter(zoo, Sp=="SNGO"& Date!='2022-04-02')
+zoo2<-full_join(CAGO,SNGO)
+
+#Faire une colonne pour jour de traitement
+zoo2<-mutate(zoo2, Jour=difftime(Date,DateChirurgie, units="days") )
+zoo2<-mutate (zoo2, JourTRT=as.numeric(Jour))
+zoo2<- mutate (zoo2, TempsTRT=cut(JourTRT, breaks=c(-Inf, -1,5,7,13,Inf), labels=c("Avant", "Jour 0", "Jour 6", "Jour 10/12", "Après")))
+glimpse(zoo2)
+
+
+
+#Choisir un sous-échantillon pour les résultats de chirurgie
+CHIRUR<-filter(zoo2, Date=='2022-04-12')
+
+
+#Method 2, Pipe, No nesting
+zoo2 %>%
+  group_by(ID)%>%
+   summarise(
+     meanMass=mean(Masse),
+     sdMass=sd(Masse),
+     Tarse=mean(Tarse),
+     Tete=mean(Tete),
+     TempsChir=mean(TempsChir))
+zoo2 %>%
+  group_by(Sp)%>%
+  summarise(
+    meanMass=mean(Masse),
+    sdMass=sd(Masse),
+    Tarse=mean(Tarse),
+    Tete=mean(Tete),
+    TempsChir=mean(TempsChir))
+
+
+#Scatterplot
+ggplot(zoo2, aes (x=Jour, y=Masse, colour=ID, shape=Sp))+ #Aesthetics c-a-d qu'est-ce que je met en x et y et comment je donne les couleurs ou forme (shape=Grazing ou Colour=Grazing)
+  geom_point() +#geometric layer:points (taille entre parenthèses)
+  xlab("Jour")+#label de l'axe des x
+  ylab("Masse")+#label de l'axe des y
+  theme_bw()#denière couche: le thème, ici on enlève le fond gris
+
+#Facets
+
+ggplot(zoo2, aes (x=Jour, y=Masse, colour=ID))+ #Aesthetics c-a-d qu'est-ce que je met en x et y et comment je donne les couleurs ou forme (shape=Grazing ou Colour=Grazing)
+  geom_point() +#geometric layer:points (taille entre parenthèses)
+  xlab("Jour")+#label de l'axe des x
+  ylab("Masse")+#label de l'axe des y
+  facet_wrap(~Sp)+
+  theme_bw()#denière couche: le thème, ici on enlève le fond gris
+
+#Belle figure
+ggplot(zoo2, aes (x=TempsTRT, y=Masse))+ #Aesthetics
+  geom_boxplot() +#geometric layer:boxplot
+  geom_point(size=4, colour='lightgrey', alpha=0.5)+#ajoute une couche avec les raw data en gris superposé
+  xlab("Temps de traitement")+#label de l'axe des x
+  ylab("Masse")+#label de l'axe des y
+  facet_wrap(~Sp)+
+  theme_bw()#denière couche: le thème, ici on enlève le fond gris
+
+#Exporter les figures avec ggplot .pdf ou .png
+ggsave("Result_prelim_masse_zoo.png")
+
+
+
+#Résultats des chirurgie#
+
+#https://cran.r-project.org/web/packages/cowplot/vignettes/introduction.html
+
+#A
+A<-
+ggplot(CHIRUR, aes(x=Etat_pompe, fill=Sp))+
+  geom_bar(colour="black")+
+  scale_fill_manual(values=c('#E69F00', 'lightgrey'),
+                    name="Espèce")+
+  xlab("État des pompes")+#label de l'axe des x
+  ylab("Nombre d'oies")+
+  theme_classic()+
+  theme(legend.justification=c(1,1), legend.position=c(1,1))
+B<-
+  ggplot(CHIRUR, aes(x=Fente_en_place, fill=Sp))+
+  geom_bar(colour="black")+
+  scale_fill_manual(values=c('#E69F00', 'lightgrey'))+  
+  xlab("Position de la fente sous-cutanée")+#label de l'axe des x
+  ylab("Nombre d'oies")+#label de l'axe des y
+  theme_classic()+
+  theme(legend.position = "none")
+C<-ggplot(CHIRUR, aes(x=Enflure, fill=Sp))+
+  geom_bar(colour="black")+
+  scale_fill_manual(values=c('#E69F00', 'lightgrey'))+  
+  xlab("Réaction inflammatoire localisée")+#label de l'axe des x
+  ylab("Nombre d'oies")+#label de l'axe des y
+  theme_classic()+
+  theme(legend.position = "none")
+D<-ggplot(CHIRUR, aes (x=Sp, y=TempsChir, fill=Sp))+ #Aesthetics
+  geom_boxplot() +#geometric layer:boxplot
+  geom_point(size=4, colour='grey', alpha=0.5)+#ajoute une couche avec les raw data en gris superposé
+  scale_fill_manual(values=c('#E69F00', 'lightgrey'))+
+  xlab("Espèce")+#label de l'axe des x
+  ylab("Temps de chirurgie (min)")+#label de l'axe des y
+  theme_classic()+
+  theme(legend.position = "none")
+plot_grid(D, A, B, C, labels = c('A', 'B', 'C', 'D'), label_size = 12)
+
+#Exporter les figures avec ggplot .pdf ou .png
+ggsave("Result_prelim_CHIRUR.png")
+```
+
