@@ -7,11 +7,15 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(magrittr)
+library(ggplot2)
 ```
 
 Droppings cort were assay by the Centre d'Étude Biologique de Chizé
 ```{r}
-cort <- readxl::read_xlsx("pompes/Data/CORT_zoo.xlsx",
+cort <- readxl::read_xlsx("../data/CORT_zoo.xlsx",
                               sheet = 1, 
                               col_names = T, 
                               na = c("-", ""))
@@ -24,136 +28,72 @@ summary(cort)
 dim(cort)
 
 #quick plot
-ggplot(subset(cort, species=="Canada Goose"), aes(date, cort))+geom_point()+geom_smooth()+ggtitle("Canada Goose")
-ggplot(subset(cort, species=="Snow Goose"), aes(date, cort))+geom_point()+geom_smooth()+ggtitle("Snow Goose")
+ggplot(subset(cort, species=="Canada Goose"), aes(date, cort))+geom_point()+geom_smooth()+ggtitle("Canada Goose") + 
+  annotate("rect", xmin = as.POSIXct("2022-04-02 10:00:00.00"), xmax = as.POSIXct("2022-04-07 06:00:00.00"), ymin = 30, ymax = 360,  colour="darkgreen" ,fill = "darkgreen", alpha=.3)+ 
+  annotate("rect", xmin = as.POSIXct("2022-04-07 10:00:00.00"), xmax = as.POSIXct("2022-04-12 06:00:00.00"), ymin = 30, ymax = 360,  colour="black",  fill = "black", alpha=.3)+ 
+  annotate("rect", xmin = as.POSIXct("2022-04-01 10:00:00.00"), xmax = as.POSIXct("2022-04-02 06:00:00.00"), ymin = 30, ymax = 360,  colour="white",  fill = "white", alpha=.8) 
+ggplot(subset(cort, species=="Snow Goose"), aes(date, cort))+geom_point()+geom_smooth()+ggtitle("Snow Goose")+ annotate("rect",
+    xmin = as.POSIXct("2022-04-16 10:00:00.00"), xmax = as.POSIXct("2022-04-21 06:00:00.00"), ymin = 25, ymax = 365,  colour="darkgreen",  fill = "darkgreen", alpha=.3)+ annotate("rect",
+    xmin = as.POSIXct("2022-04-21 10:00:00.00"), xmax = as.POSIXct("2022-04-26 06:00:00.00"), ymin = 25, ymax = 365,  colour="black",  fill = "black", alpha=.3)+ 
+  annotate("rect", xmin = as.POSIXct("2022-04-15 10:00:00.00"), xmax = as.POSIXct("2022-04-16 06:00:00.00"), ymin = 25, ymax = 365,  colour="white",  fill = "white", alpha=.5)  
 ```
 
 
 ```{r}
-zoo <- readxl::read_xlsx("pompes/data/Zoo2022.xlsx",
+zoo <- readxl::read_xlsx("../data/Zoo2022.xlsx",
                               sheet = 1, 
                               col_names = T, 
                               na = c("-", ""))
 
+
+col_cago<-paletteer::paletteer_d("colorBlindness::Brown2Blue12Steps")[1:5]
+col_cago<-c("#331900FF", "#662F00FF", "#996035FF", "#CC9B7AFF", "#D8AF97FF")
+col_sngo<-paletteer::paletteer_d("colorBlindness::Brown2Blue12Steps")[7:12]
 #With dplyr
 #Using dplyr; always takes and gives a dataframe
 glimpse(zoo)
 
+zoo <- zoo %>%
+  mutate(HeureDebut = ymd_hms(paste(DateChirurgie, format(HeureDebut, format = "%H:%M:%S"))),
+         HeureFin = ymd_hms(paste(DateChirurgie, format(HeureFin, format = "%H:%M:%S"))),
+         Jour=difftime(Date,DateChirurgie, units="days"),
+         JourTRT=as.numeric(Jour),
+         TempsTRT=cut(JourTRT, breaks=c(-Inf, -1,5,7,13,Inf), labels=c("Avant", "Jour 0", "Jour 6", "Jour 10/12", "Après"))) %>%
+  filter(!is.na(Masse))
 
-zoo$Date<- as.POSIXlt(strptime(zoo$Date, "%Y-%m-%d"))
-zoo$DateChirurgie<-as.POSIXlt(strptime(zoo$DateChirurgie, "%Y-%m-%d"))
+glimpse(zoo)
 
-#Quick summary
-summary(zoo)
+CAGO<-subset(zoo, Sp=="CAGO"& Date >= "2022-04-01" & Date <= "2022-04-12")
+SNGO<-subset(zoo, Sp=="SNGO"& Date >= "2022-04-15")
+# Create a sequence of dates within your desired range
+date_range <- seq(as.Date("2022-04-03"), as.Date("2022-04-12"), by="days")
 
-
-#Enlever des donnees du 2 avril pour les oies des neiges
-
-CAGO<-filter(zoo, Sp=="CAGO")
-SNGO<-filter(zoo, Sp=="SNGO"& Date!='2022-04-02')
-zoo2<-full_join(CAGO,SNGO)
-
-#Faire une colonne pour jour de traitement
-zoo2<-mutate(zoo2, Jour=difftime(Date,DateChirurgie, units="days") )
-zoo2<-mutate (zoo2, JourTRT=as.numeric(Jour))
-zoo2<- mutate (zoo2, TempsTRT=cut(JourTRT, breaks=c(-Inf, -1,5,7,13,Inf), labels=c("Avant", "Jour 0", "Jour 6", "Jour 10/12", "Après")))
-glimpse(zoo2)
-
-
-
-#Choisir un sous-échantillon pour les résultats de chirurgie
-CHIRUR<-filter(zoo2, Date=='2022-04-12')
-
-
-#Method 2, Pipe, No nesting
-zoo2 %>%
-  group_by(ID)%>%
-   summarise(
-     meanMass=mean(Masse),
-     sdMass=sd(Masse),
-     Tarse=mean(Tarse),
-     Tete=mean(Tete),
-     TempsChir=mean(TempsChir))
-zoo2 %>%
-  group_by(Sp)%>%
-  summarise(
-    meanMass=mean(Masse),
-    sdMass=sd(Masse),
-    Tarse=mean(Tarse),
-    Tete=mean(Tete),
-    TempsChir=mean(TempsChir))
+plot_cago<-ggplot(subset(cort, species=="Canada Goose"), aes(date, cort))+ scale_y_continuous(name="Corticosterone (in pg/mg) in dropping samples", sec.axis=sec_axis(trans=~.*15+1000, name="Canada goose mass (in g)")) +geom_point(color="black")+geom_smooth(color="black")+ggtitle("Canada Goose") + 
+  annotate("rect", xmin = as.POSIXct("2022-04-02 10:00:00.00"), xmax = as.POSIXct("2022-04-07 06:00:00.00"), ymin = 30, ymax = 360,  colour="darkgreen", fill = "darkgreen", alpha=.3)+ 
+  annotate("rect", xmin = as.POSIXct("2022-04-07 10:00:00.00"), xmax = as.POSIXct("2022-04-12 06:00:00.00"), ymin = 30, ymax = 360,  colour="black",  fill = "black", alpha=.3)+ 
+  annotate("rect", xmin = as.POSIXct("2022-04-01 10:00:00.00"), xmax = as.POSIXct("2022-04-02 06:00:00.00"), ymin = 30, ymax = 360,  colour="white",  fill = "white", alpha=.8)+
+  geom_point(aes(Date, (Masse-1000)/15, colour=ID), data=CAGO, size=3)+scale_color_manual(values=col_cago)+
+  theme(
+    axis.title.y = element_text(color = "black"),
+    axis.text.y = element_text(color = "black"),
+    axis.title.y.right = element_text(color = "#996035FF"),
+    axis.text.y.right = element_text(color = "#996035FF"))
 
 
-#Scatterplot
-ggplot(zoo2, aes (x=Jour, y=Masse, colour=ID, shape=Sp))+ #Aesthetics c-a-d qu'est-ce que je met en x et y et comment je donne les couleurs ou forme (shape=Grazing ou Colour=Grazing)
-  geom_point() +#geometric layer:points (taille entre parenthèses)
-  xlab("Jour")+#label de l'axe des x
-  ylab("Masse")+#label de l'axe des y
-  theme_bw()#denière couche: le thème, ici on enlève le fond gris
+plot_sngo<-ggplot(subset(cort, species=="Snow Goose"), aes(date, cort))+ scale_y_continuous(name="Corticosterone (in pg/mg) in dropping samples", sec.axis=sec_axis(trans=~.*15+1000, name="Snow goose mass (in g)")) +geom_point()+geom_smooth(color="black")+ggtitle("Snow Goose")+ annotate("rect",
+    xmin = as.POSIXct("2022-04-16 10:00:00.00"), xmax = as.POSIXct("2022-04-21 06:00:00.00"), ymin = 25, ymax = 365,  colour="darkgreen",  fill = "darkgreen", alpha=.3)+ annotate("rect",
+    xmin = as.POSIXct("2022-04-21 10:00:00.00"), xmax = as.POSIXct("2022-04-26 06:00:00.00"), ymin = 25, ymax = 365,  colour="black",  fill = "black", alpha=.3)+ 
+  annotate("rect", xmin = as.POSIXct("2022-04-15 10:00:00.00"), xmax = as.POSIXct("2022-04-16 06:00:00.00"), ymin = 25, ymax = 365,  colour="white",  fill = "white", alpha=.5)+
+  geom_point(aes(Date, (Masse-1000)/15, colour=ID), data=SNGO, size=3)+scale_color_manual(values=col_sngo)+
+  theme(
+    axis.title.y = element_text(color = "black"),
+    axis.text.y = element_text(color = "black"),
+    axis.title.y.right = element_text(color = "#007A99FF"),
+    axis.text.y.right = element_text(color = "#007A99FF"))
 
-#Facets
+plot_cago
+plot_sngo
 
-ggplot(zoo2, aes (x=Jour, y=Masse, colour=ID))+ #Aesthetics c-a-d qu'est-ce que je met en x et y et comment je donne les couleurs ou forme (shape=Grazing ou Colour=Grazing)
-  geom_point() +#geometric layer:points (taille entre parenthèses)
-  xlab("Jour")+#label de l'axe des x
-  ylab("Masse")+#label de l'axe des y
-  facet_wrap(~Sp)+
-  theme_bw()#denière couche: le thème, ici on enlève le fond gris
-
-#Belle figure
-ggplot(zoo2, aes (x=TempsTRT, y=Masse))+ #Aesthetics
-  geom_boxplot() +#geometric layer:boxplot
-  geom_point(size=4, colour='lightgrey', alpha=0.5)+#ajoute une couche avec les raw data en gris superposé
-  xlab("Temps de traitement")+#label de l'axe des x
-  ylab("Masse")+#label de l'axe des y
-  facet_wrap(~Sp)+
-  theme_bw()#denière couche: le thème, ici on enlève le fond gris
-
-#Exporter les figures avec ggplot .pdf ou .png
-ggsave("Result_prelim_masse_zoo.png")
-
-
-
-#Résultats des chirurgie#
-
-#https://cran.r-project.org/web/packages/cowplot/vignettes/introduction.html
-
-#A
-A<-
-ggplot(CHIRUR, aes(x=Etat_pompe, fill=Sp))+
-  geom_bar(colour="black")+
-  scale_fill_manual(values=c('#E69F00', 'lightgrey'),
-                    name="Espèce")+
-  xlab("État des pompes")+#label de l'axe des x
-  ylab("Nombre d'oies")+
-  theme_classic()+
-  theme(legend.justification=c(1,1), legend.position=c(1,1))
-B<-
-  ggplot(CHIRUR, aes(x=Fente_en_place, fill=Sp))+
-  geom_bar(colour="black")+
-  scale_fill_manual(values=c('#E69F00', 'lightgrey'))+  
-  xlab("Position de la fente sous-cutanée")+#label de l'axe des x
-  ylab("Nombre d'oies")+#label de l'axe des y
-  theme_classic()+
-  theme(legend.position = "none")
-C<-ggplot(CHIRUR, aes(x=Enflure, fill=Sp))+
-  geom_bar(colour="black")+
-  scale_fill_manual(values=c('#E69F00', 'lightgrey'))+  
-  xlab("Réaction inflammatoire localisée")+#label de l'axe des x
-  ylab("Nombre d'oies")+#label de l'axe des y
-  theme_classic()+
-  theme(legend.position = "none")
-D<-ggplot(CHIRUR, aes (x=Sp, y=TempsChir, fill=Sp))+ #Aesthetics
-  geom_boxplot() +#geometric layer:boxplot
-  geom_point(size=4, colour='grey', alpha=0.5)+#ajoute une couche avec les raw data en gris superposé
-  scale_fill_manual(values=c('#E69F00', 'lightgrey'))+
-  xlab("Espèce")+#label de l'axe des x
-  ylab("Temps de chirurgie (min)")+#label de l'axe des y
-  theme_classic()+
-  theme(legend.position = "none")
-plot_grid(D, A, B, C, labels = c('A', 'B', 'C', 'D'), label_size = 12)
-
-#Exporter les figures avec ggplot .pdf ou .png
-ggsave("Result_prelim_CHIRUR.png")
 ```
 
+<br> Corticosterone content in droppings and fattening pattern for Canada goose and greater snow goose during experiment at Zoo sauvage de St-Félicien in 2022. Phases of the experiment are represented by the shaded area: white being the recuperation phase, green the experimental treatment and black the control treatment. 

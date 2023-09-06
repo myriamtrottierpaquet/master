@@ -9,6 +9,7 @@ cort <- readxl::read_xlsx("pompes/data/CORT_zoo.xlsx",
                               col_names = T, 
                               na = c("-", ""))
 
+write_rds(cort, "CORT_zoo.Rds")
 
 #quick overview
 glimpse(cort)
