@@ -1,9 +1,12 @@
 ---
-title: "Data exploration"
+title: "Exploration des données"
+Subtitle: "VALIDATION D'UNE MÉTHODE NOVATRICE POUR MANIPULER EXPÉRIMENTALEMENT LES NIVEAUX DE STRESS CHEZ LA GRANDE OIE DES NEIGES"
 author: "Myriam Trottier-Paquet"
 date: "`r Sys.Date()`"
 output: html_document
 ---
+# Contexte
+Dans un contexte de changements globaux, de nombreux stresseurs (conditions climatiques extrêmes, dégradation de l’habitat, dérangement humain, pollution) sont susceptibles d’affecter profondément le comportement, la reproduction et la survie des animaux. Si la migration des oiseaux correspond à une réponse adaptative face à de fortes variations saisonnières, celle-ci pourraient être altérée du fait de l’augmentation de multiples stresseurs. Les glucocorticoïdes, ou « hormones de stress » vont varier au niveau de l’organisme en fonction de ces contraintes. La manipulation expérimentale des niveaux de glucocorticoïdes permet de comprendre comment le stress affecte les traits phénotypiques et les décisions comportementales. À l’heure actuelle, il n’existe aucune méthodologie connue pour induire un stress chronique _In natura_. 
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -11,9 +14,62 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(magrittr)
 library(ggplot2)
+
+
+col_cago<-paletteer::paletteer_d("colorBlindness::Brown2Blue12Steps")[1:5]
+col_sngo<-paletteer::paletteer_d("colorBlindness::Brown2Blue12Steps")[7:12]
 ```
 
-Droppings cort were assay by the Centre d'Étude Biologique de Chizé
+# Objectifs et hypothèses
+L’objectif est de développer une méthodologie pour simuler un stress chronique à l’aide de pompes à diffusion à débit programmable fixées sur les plumes et reliées à un cathéter placé en sous-cutané qui, si elle est validée, pourra être utilisée sur des oies sauvages capturées en migration. 
+Le premier objectif est méthodologique : valider la procédure de fixation des pompes en externe, avec un cathéter sous-cutané. 
+Le second objectif est de simuler un stress chronique sur 5 jours par la diffusion d’ACTH par les pompes.
+
+## Hypothèses
+L'administration d'une dose croissante d'ACTH par la méthodologie des pompes à diffusion à débit programmable fixées sur les plumes et reliées à un cathéter placé en sous-cutané peut maintenir la corticostérone à un niveau élevé pendant une période prolongée et entraîner des effets négatifs sur la prise alimentaire et l’engraissement.
+
+Prédiction 1. L’amélioration de la méthode de fixation des pompes peut permettre aux pompes de demeurer en place et fonctionnelles (la solution administrée par la pompe parvient dans l’organisme et est excrétée par les fèces) pour toute la durée de l’expérimentation.
+
+Prédiction 2. Pendant le traitement expérimental, le niveau de corticostérone dans l’organisme devrait demeurer à un niveau élevé, l’allocation de temps au différentes activités et le patron d’engraissement des oies devrait aussi être modifié : les oies devraient passer moins de temps à s’alimenter et perdre de la masse pendant la phase test du traitement par rapport à la phase contrôle.
+
+# Le traitement expérimental
+Au zoo sauvage de st-Félicien au printemps 2022, 5 bernaches du Canada et 5 oies des neiges en semi-captivité ont été équipées de pompes iprecio. Des accéléromètres Axy 5 XS fixés sur des colliers et des caméras trappes reconyx dans l'enclos ont permis de récolter l'information nécessaire à l'analyse du comportement. La récolte quotidienne de fèces a permis le dosage de la corticostérone au laboratoire du Centre d'Etudes Biologiques de Chizé. La masse a été mesurée au début de l'expérimentation, et au jour 0, 6 et au jour 10 ou 11 du traitement expérimental. Le traitement expérimental consiste en une phase de repos le jour de la chirurgie, en une phase test de 5 jours où une dose croissante d’ACTH est administrée, puis en une phase contrôle de 5 jours où la pompe demeure en place, mais n’administre plus d’hormone. Le dosage utilisé est détaillé dans le tableau.
+
+```{r}
+data.frame(Stage=c(0:10),
+           Phase=c("Repos", "Test", "Test", "Test", "Test", "Test", "Contrôle", "Contrôle", "Contrôle", "Contrôle", "Contrôle"),
+           Dose=c("0", "0,01", "0,02","0,03","0,05","0,07", "0", "0", "0", "0", "0")) %>%
+  as_tibble() %>% 
+    knitr::kable(col.names = c("Jours", "Phase", "Dose d'ACTH administrée (en mg/kg/jour)"),
+               align = "ccc",
+               caption = "Dosage quotidien",  
+               format = "simple")
+```
+
+# Variables
+
+Variables indépendantes:
+- Espèce: catégorique 2 niveaux (bernache du Canada, Oie des neiges)
+- Sexe: catégorique 2 niveaux (mâle, femelle)
+- Âge: catégorique 3 niveaux (juvénile, adulte, inconnu)
+- Individu (10 ID)
+- Masse avant l'expérience (en g): numérique continue
+- Longueur du tarse (en mm): numérique continue
+- Longueur de la tête (en mm): numérique continue
+- Période d'expérimentation : catégorique à 2 niveaux (1, 2) (confondue avec l'effet de l'espèce)
+- Dosage d'ACTH administré (en mg/kg/jour): catégorique ordinale à 6 niveaux (0, 0.01, 0.02, 0.03, 0.05, 0.07)
+- Phase du traitement: catégorique à 2 niveaux (test, contrôle)
+
+Variables dépendantes:
+- Masse au jour 0, jour 6 et jour 10/11 (en g): numérique continue
+- Corticostérone dans les fèces (en pg/mg): numérique continue
+- Accélération gravitationnelle (en g) sur 3 axes qui permet de calculer:
+ - Accélération minimale spécifique (*MSA = Minimum Specific Acceleration*)
+ - Angle moyen d'accélération (*pitch*)
+ - Allocation de temps aux différentes activités
+ 
+# Exploration des données
+
 ```{r}
 cort <- readxl::read_xlsx("../data/CORT_zoo.xlsx",
                               sheet = 1, 
@@ -27,17 +83,43 @@ head(cort) ;tail(cort)
 summary(cort)
 dim(cort)
 
-#quick plot
-ggplot(subset(cort, species=="Canada Goose"), aes(date, cort))+geom_point()+geom_smooth()+ggtitle("Canada Goose") + 
+cort_date_cago<-ggplot(subset(cort, species=="Canada Goose"), aes(date, cort))+geom_point()+geom_smooth()+ggtitle("Canada Goose") + 
   annotate("rect", xmin = as.POSIXct("2022-04-02 10:00:00.00"), xmax = as.POSIXct("2022-04-07 06:00:00.00"), ymin = 30, ymax = 360,  colour="darkgreen" ,fill = "darkgreen", alpha=.3)+ 
   annotate("rect", xmin = as.POSIXct("2022-04-07 10:00:00.00"), xmax = as.POSIXct("2022-04-12 06:00:00.00"), ymin = 30, ymax = 360,  colour="black",  fill = "black", alpha=.3)+ 
   annotate("rect", xmin = as.POSIXct("2022-04-01 10:00:00.00"), xmax = as.POSIXct("2022-04-02 06:00:00.00"), ymin = 30, ymax = 360,  colour="white",  fill = "white", alpha=.8) 
-ggplot(subset(cort, species=="Snow Goose"), aes(date, cort))+geom_point()+geom_smooth()+ggtitle("Snow Goose")+ annotate("rect",
+cort_date_sngo<-ggplot(subset(cort, species=="Snow Goose"), aes(date, cort))+geom_point()+geom_smooth()+ggtitle("Snow Goose")+ annotate("rect",
     xmin = as.POSIXct("2022-04-16 10:00:00.00"), xmax = as.POSIXct("2022-04-21 06:00:00.00"), ymin = 25, ymax = 365,  colour="darkgreen",  fill = "darkgreen", alpha=.3)+ annotate("rect",
     xmin = as.POSIXct("2022-04-21 10:00:00.00"), xmax = as.POSIXct("2022-04-26 06:00:00.00"), ymin = 25, ymax = 365,  colour="black",  fill = "black", alpha=.3)+ 
   annotate("rect", xmin = as.POSIXct("2022-04-15 10:00:00.00"), xmax = as.POSIXct("2022-04-16 06:00:00.00"), ymin = 25, ymax = 365,  colour="white",  fill = "white", alpha=.5)  
-```
 
+cort2 <- cort %>%
+  mutate(
+    species = ifelse(species == "snow Goose", "Snow Goose", species),
+    date_chir = ifelse(species == "Canada Goose", ymd("2022-04-02"), ymd("2022-04-16")),
+    date = ymd(date),  # Parse date as Date
+    jour = as.numeric(round(date - date_chir)),
+    phase = case_when(
+      jour == 0 ~ "recuperation",
+      jour > 0 & jour < 6 ~ "test",
+      jour >= 6 ~ "controle"
+    ),
+    dose = case_when(
+      jour == 1 ~ 0.01,
+      jour == 2 ~ 0.02,
+      jour == 3 ~ 0.03,
+      jour == 4 ~ 0.05,
+      jour == 5 ~ 0.07,
+      TRUE ~ 0
+    )
+  )
+
+#quick plot
+
+ggplot(cort2)+geom_point(aes(jour, cort, colour=species))+scale_color_manual(values=c("#996035FF", "#007A99FF"))
+ggplot(cort2)+geom_point(aes(dose, cort, colour=species))+scale_color_manual(values=c("#996035FF", "#007A99FF"))
+ggplot(cort2)+geom_point(aes(phase, cort, colour=species))+scale_color_manual(values=c("#996035FF", "#007A99FF"))
+```
+No feces were collected on day 0 and 1 for Canada goose. We have a few high value (>300) for the corticosterone assay, but nothing seems out of range, no outliers. 
 
 ```{r}
 zoo <- readxl::read_xlsx("../data/Zoo2022.xlsx",
@@ -45,29 +127,11 @@ zoo <- readxl::read_xlsx("../data/Zoo2022.xlsx",
                               col_names = T, 
                               na = c("-", ""))
 
+chir <- read.delim2("../data/CHIR.txt",header=TRUE,sep = "\t")
 
-col_cago<-paletteer::paletteer_d("colorBlindness::Brown2Blue12Steps")[1:5]
-col_cago<-c("#331900FF", "#662F00FF", "#996035FF", "#CC9B7AFF", "#D8AF97FF")
-col_sngo<-paletteer::paletteer_d("colorBlindness::Brown2Blue12Steps")[7:12]
-#With dplyr
-#Using dplyr; always takes and gives a dataframe
-glimpse(zoo)
-
-zoo <- zoo %>%
-  mutate(HeureDebut = ymd_hms(paste(DateChirurgie, format(HeureDebut, format = "%H:%M:%S"))),
-         HeureFin = ymd_hms(paste(DateChirurgie, format(HeureFin, format = "%H:%M:%S"))),
-         Jour=difftime(Date,DateChirurgie, units="days"),
-         JourTRT=as.numeric(Jour),
-         TempsTRT=cut(JourTRT, breaks=c(-Inf, -1,5,7,13,Inf), labels=c("Avant", "Jour 0", "Jour 6", "Jour 10/12", "Après"))) %>%
-  filter(!is.na(Masse))
-
-glimpse(zoo)
-
+#Plots
 CAGO<-subset(zoo, Sp=="CAGO"& Date >= "2022-04-01" & Date <= "2022-04-12")
 SNGO<-subset(zoo, Sp=="SNGO"& Date >= "2022-04-15")
-# Create a sequence of dates within your desired range
-date_range <- seq(as.Date("2022-04-03"), as.Date("2022-04-12"), by="days")
-
 plot_cago<-ggplot(subset(cort, species=="Canada Goose"), aes(date, cort))+ scale_y_continuous(name="Corticosterone (in pg/mg) in dropping samples", sec.axis=sec_axis(trans=~.*15+1000, name="Canada goose mass (in g)")) +geom_point(color="black")+geom_smooth(color="black")+ggtitle("Canada Goose") + 
   annotate("rect", xmin = as.POSIXct("2022-04-02 10:00:00.00"), xmax = as.POSIXct("2022-04-07 06:00:00.00"), ymin = 30, ymax = 360,  colour="darkgreen", fill = "darkgreen", alpha=.3)+ 
   annotate("rect", xmin = as.POSIXct("2022-04-07 10:00:00.00"), xmax = as.POSIXct("2022-04-12 06:00:00.00"), ymin = 30, ymax = 360,  colour="black",  fill = "black", alpha=.3)+ 
@@ -83,7 +147,7 @@ plot_cago<-ggplot(subset(cort, species=="Canada Goose"), aes(date, cort))+ scale
 plot_sngo<-ggplot(subset(cort, species=="Snow Goose"), aes(date, cort))+ scale_y_continuous(name="Corticosterone (in pg/mg) in dropping samples", sec.axis=sec_axis(trans=~.*15+1000, name="Snow goose mass (in g)")) +geom_point()+geom_smooth(color="black")+ggtitle("Snow Goose")+ annotate("rect",
     xmin = as.POSIXct("2022-04-16 10:00:00.00"), xmax = as.POSIXct("2022-04-21 06:00:00.00"), ymin = 25, ymax = 365,  colour="darkgreen",  fill = "darkgreen", alpha=.3)+ annotate("rect",
     xmin = as.POSIXct("2022-04-21 10:00:00.00"), xmax = as.POSIXct("2022-04-26 06:00:00.00"), ymin = 25, ymax = 365,  colour="black",  fill = "black", alpha=.3)+ 
-  annotate("rect", xmin = as.POSIXct("2022-04-15 10:00:00.00"), xmax = as.POSIXct("2022-04-16 06:00:00.00"), ymin = 25, ymax = 365,  colour="white",  fill = "white", alpha=.5)+
+  annotate("rect", xmin = as.POSIXct("2022-04-15 10:00:00.00"), xmax = as.POSIXct("2022-04-16 06:00:00.00"), ymin = 25, ymax = 365,  colour="white",  fill = "white", alpha=.3)+
   geom_point(aes(Date, (Masse-1000)/15, colour=ID), data=SNGO, size=3)+scale_color_manual(values=col_sngo)+
   theme(
     axis.title.y = element_text(color = "black"),
@@ -91,9 +155,29 @@ plot_sngo<-ggplot(subset(cort, species=="Snow Goose"), aes(date, cort))+ scale_y
     axis.title.y.right = element_text(color = "#007A99FF"),
     axis.text.y.right = element_text(color = "#007A99FF"))
 
+zoo <- cbind(zoo, chir[, 11:17])
+zoo <- zoo %>%
+  mutate(HeureDebut = ymd_hms(paste(DateChirurgie, format(HeureDebut, format = "%H:%M:%S"))),
+         HeureFin = ymd_hms(paste(DateChirurgie, format(HeureFin, format = "%H:%M:%S"))),
+         Jour=difftime(Date,DateChirurgie, units="days"),
+         JourTRT=as.numeric(Jour),
+         TempsTRT=cut(JourTRT, breaks=c(-Inf, -1,5,7,13,Inf), labels=c("Avant", "Jour 0", "Jour 6", "Jour 10/12", "Après"))) %>%
+  filter(!is.na(Masse))
+
+zoo <- zoo %>%
+  group_by(ID) %>%
+  mutate(masse_avant = ifelse(Date == as.Date("2022-03-28"), Masse, NA_real_))%>%
+  fill(masse_avant, .direction = "downup") %>%
+  ungroup()
+
 plot_cago
 plot_sngo
 
 ```
 
-<br> Corticosterone content in droppings and fattening pattern for Canada goose and greater snow goose during experiment at Zoo sauvage de St-Félicien in 2022. Phases of the experiment are represented by the shaded area: white being the recuperation phase, green the experimental treatment and black the control treatment. 
+<br> Corticosterone content in droppings and fattening pattern for Canada goose and greater snow goose during experiment at Zoo sauvage de St-Félicien in 2022. Phases of the experiment are represented by the shaded area: white being the recuperation phase, green the experimental treatment and black the control.
+
+
+```{r}
+
+```
