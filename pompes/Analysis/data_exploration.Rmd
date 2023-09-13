@@ -14,6 +14,8 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(magrittr)
 library(ggplot2)
+library(ggnewscale)
+library(cowplot)
 
 
 col_cago<-paletteer::paletteer_d("colorBlindness::Brown2Blue12Steps")[1:5]
@@ -49,6 +51,7 @@ data.frame(Stage=c(0:10),
 # Variables
 
 Variables indépendantes:
+
 - Espèce: catégorique 2 niveaux (bernache du Canada, Oie des neiges)
 - Sexe: catégorique 2 niveaux (mâle, femelle)
 - Âge: catégorique 3 niveaux (juvénile, adulte, inconnu)
@@ -61,12 +64,13 @@ Variables indépendantes:
 - Phase du traitement: catégorique à 2 niveaux (test, contrôle)
 
 Variables dépendantes:
+
 - Masse au jour 0, jour 6 et jour 10/11 (en g): numérique continue
 - Corticostérone dans les fèces (en pg/mg): numérique continue
 - Accélération gravitationnelle (en g) sur 3 axes qui permet de calculer:
- - Accélération minimale spécifique (*MSA = Minimum Specific Acceleration*)
- - Angle moyen d'accélération (*pitch*)
- - Allocation de temps aux différentes activités
+  + Accélération minimale spécifique (*MSA = Minimum Specific Acceleration*)
+  + Angle moyen d'accélération (*pitch*)
+  + Allocation de temps aux différentes activités
  
 # Exploration des données
 
@@ -103,6 +107,7 @@ cort2 <- cort %>%
       jour > 0 & jour < 6 ~ "test",
       jour >= 6 ~ "controle"
     ),
+    phase = factor(phase, levels=c("recuperation", "test", "controle")),
     dose = case_when(
       jour == 1 ~ 0.01,
       jour == 2 ~ 0.02,
@@ -166,9 +171,14 @@ zoo <- zoo %>%
 
 zoo <- zoo %>%
   group_by(ID) %>%
-  mutate(masse_avant = ifelse(Date == as.Date("2022-03-28"), Masse, NA_real_))%>%
+  mutate(masse_avant = ifelse(Date == as.Date("2022-03-28"), Masse, NA_real_),
+         masse_0 = ifelse(JourTRT==0, Masse, NA_real_))%>%
   fill(masse_avant, .direction = "downup") %>%
-  ungroup()
+  ungroup() %>%
+  mutate(diff_mass = Masse-masse_avant,
+         mass_ratio = (Masse-masse_avant)/masse_avant*100,
+         TempsTRT = as.factor(TempsTRT),
+         TempsTRT = factor(TempsTRT,levels=c("Avant", "Jour 0", "Jour 6", "Jour 10/12", "Après")))
 
 plot_cago
 plot_sngo
@@ -179,5 +189,89 @@ plot_sngo
 
 
 ```{r}
+#Différence de masse en fonction de la date
+ggplot()+
+  # annotate("rect", xmin = as.POSIXct("2022-04-01 10:00:00.00"), xmax = as.POSIXct("2022-04-12 06:00:00.00"), ymin = -275, ymax = 300,  colour="#996035FF",  fill = "#996035FF", alpha=.3) +
+  # annotate("rect", xmin = as.POSIXct("2022-04-15 10:00:00.00"), xmax = as.POSIXct("2022-04-26 06:00:00.00"), ymin = -275, ymax = 300,  colour="#007A99FF",  fill = "#007A99FF", alpha=.3)+
+  geom_point(data=subset(zoo, Sp=="SNGO"), aes(Date, diff_mass, colour=ID), shape=17, size=3)+
+  geom_smooth(data=subset(zoo, Sp=="SNGO"), aes(Date, diff_mass), color="#007A99FF", fill="#007A99FF")+
+  scale_color_manual(values=c(col_sngo), name="Snow Goose")+
+  new_scale_color()+
+  geom_point(data=subset(zoo, Sp=="CAGO"), aes(Date, diff_mass, colour=ID), shape=16, size=2)+
+  geom_smooth(data=subset(zoo, Sp=="CAGO"), aes(Date, diff_mass), color="#996035FF", fill= "#996035FF")+
+  scale_color_manual(values=c(col_cago), name="Canada Goose")+
+  theme_classic()
+#Ratio de la masse en fonction de la date
+ggplot()+
+  # annotate("rect", xmin = as.POSIXct("2022-04-01 10:00:00.00"), xmax = as.POSIXct("2022-04-12 06:00:00.00"), ymin = -275, ymax = 300,  colour="#996035FF",  fill = "#996035FF", alpha=.3) +
+  # annotate("rect", xmin = as.POSIXct("2022-04-15 10:00:00.00"), xmax = as.POSIXct("2022-04-26 06:00:00.00"), ymin = -275, ymax = 300,  colour="#007A99FF",  fill = "#007A99FF", alpha=.3)+
+  geom_point(data=subset(zoo, Sp=="SNGO"), aes(Date, mass_ratio, colour=ID), shape=17, size=3)+
+  geom_smooth(data=subset(zoo, Sp=="SNGO"), aes(Date, mass_ratio), color="#007A99FF", fill="#007A99FF")+
+  scale_color_manual(values=c(col_sngo), name="Snow Goose")+
+  new_scale_color()+
+  geom_point(data=subset(zoo, Sp=="CAGO"), aes(Date, mass_ratio, colour=ID), shape=16, size=2)+
+  geom_smooth(data=subset(zoo, Sp=="CAGO"), aes(Date, mass_ratio), color="#996035FF", fill= "#996035FF")+
+  scale_color_manual(values=c(col_cago), name="Canada Goose")+
+  theme_classic()
+#En fonction du moment du traitement
+ggplot()+
+  geom_point(data=subset(zoo, Sp=="SNGO"), aes(JourTRT, diff_mass, colour=ID), shape=17, size=3)+
+  geom_smooth(data=subset(zoo, Sp=="SNGO"), aes(JourTRT, diff_mass), color="#007A99FF", fill="#007A99FF")+
+  scale_color_manual(values=c(col_sngo), name="Snow Goose")+
+  new_scale_color()+
+  geom_point(data=subset(zoo, Sp=="CAGO"), aes(JourTRT, diff_mass, colour=ID), shape=16, size=2)+
+  geom_smooth(data=subset(zoo, Sp=="CAGO"), aes(JourTRT, diff_mass), color="#996035FF", fill= "#996035FF")+
+  scale_color_manual(values=c(col_cago), name="Canada Goose")+ 
+  theme_classic()
+
+#Différence de masse en fonction du moment du traitement
+p1<-ggplot()+
+  geom_boxplot(data=subset(zoo, Sp=="SNGO"), aes(TempsTRT, diff_mass), color="#007A99FF", fill="#007A99FF", position= position_dodge(width=0.75), alpha=.05)+
+  geom_point(data=subset(zoo, Sp=="SNGO"), aes(TempsTRT, diff_mass, colour=ID), shape=17, size=3)+
+  scale_color_manual(values=c(col_sngo), name="Snow Goose")+
+  labs(x = "TempsTRT", y = "différence de masse (en g)") +
+  theme_classic()
+p2<-ggplot()+
+  geom_boxplot(data=subset(zoo, Sp=="CAGO"), aes(TempsTRT, diff_mass), color="#996035FF", fill="#996035FF", position= position_dodge(width=0.75), alpha=.05)+
+  geom_point(data=subset(zoo, Sp=="CAGO"), aes(TempsTRT, diff_mass, colour=ID), shape=16, size=2)+
+    scale_color_manual(values=c(col_cago), name="Canada Goose")+
+  theme_classic()
+p3<-ggplot()+geom_point(data=subset(zoo, Sp=="SNGO"), aes(TempsTRT, diff_mass, colour=ID), shape=17, size=3)+scale_color_manual(values=c(col_sngo), name="Snow Goose")+new_scale_color()+geom_point(data=subset(zoo, Sp=="CAGO"), aes(TempsTRT, diff_mass, colour=ID), shape=16, size=2)+scale_color_manual(values=c(col_cago), name="Canada Goose")+ theme_classic()
+plot_grid(p1 + theme(legend.position = "none"), p2+ theme(legend.position = "none"), get_legend(p3), ncol=3, rel_widths = c(5,5,2))
+
+#Ratio en fonction du traitement
+p4<-ggplot()+
+  geom_boxplot(data=subset(zoo, Sp=="SNGO"), aes(TempsTRT, mass_ratio), color="#007A99FF", fill="#007A99FF", position= position_dodge(width=0.75), alpha=.05)+
+  geom_point(data=subset(zoo, Sp=="SNGO"), aes(TempsTRT, mass_ratio, colour=ID), shape=17, size=3)+
+  scale_color_manual(values=c(col_sngo), name="Snow Goose")+
+  labs(x = "TempsTRT", y = "ratio de différence de masse (en %)") +
+  theme_classic()
+p5<-ggplot()+
+  geom_boxplot(data=subset(zoo, Sp=="CAGO"), aes(TempsTRT, mass_ratio), color="#996035FF", fill="#996035FF", position= position_dodge(width=0.75), alpha=.05)+
+  geom_point(data=subset(zoo, Sp=="CAGO"), aes(TempsTRT, mass_ratio, colour=ID), shape=16, size=2)+
+    scale_color_manual(values=c(col_cago), name="Canada Goose")+
+  theme_classic()
+plot_grid(p4 + theme(legend.position = "none"), p5+ theme(legend.position = "none"), get_legend(p3), ncol=3, rel_widths = c(5,5,2))
+
+ggplot() +
+  geom_boxplot(data = zoo, aes(x = TempsTRT, y = diff_mass, fill = Sp), position = position_dodge(width = 0.75), alpha=0.5) +
+  scale_fill_manual(values = c(SNGO = "#007A99FF", CAGO = "#996035FF"), name = "Species") +
+  geom_point(data=subset(zoo, Sp=="SNGO"), aes(TempsTRT, diff_mass, colour=ID), shape=17, size=3) +
+  scale_color_manual(values=c(col_sngo), name="Snow Goose")+
+  new_scale_color()+
+  geom_point(data=subset(zoo, Sp=="CAGO"), aes(TempsTRT, diff_mass, colour=ID), shape=16, size=2)+
+  scale_color_manual(values=c(col_cago), name="Canada Goose")+
+  theme_classic()
+ggplot() +
+  geom_boxplot(data = zoo, aes(x = TempsTRT, y = mass_ratio, fill = Sp), position = position_dodge(width = 0.75), alpha=0.5) +
+  scale_fill_manual(values = c(SNGO = "#007A99FF", CAGO = "#996035FF"), name = "Species") +
+  geom_point(data=subset(zoo, Sp=="SNGO"), aes(TempsTRT, mass_ratio, colour=ID), shape=17, size=3) +
+  scale_color_manual(values=c(col_sngo), name="Snow Goose")+
+  new_scale_color()+
+  geom_point(data=subset(zoo, Sp=="CAGO"), aes(TempsTRT, mass_ratio, colour=ID), shape=16, size=2)+
+  scale_color_manual(values=c(col_cago), name="Canada Goose")+
+  theme_classic()
 
 ```
+
+<br> We can already see that the change in mass pattern seems to be more influenced by the date (seasonal changes) than by the treatment. 
